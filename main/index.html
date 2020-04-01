@@ -1,0 +1,246 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<style>
+    body {background-color: orange;}
+    h1  { text-align:center; color:red; }
+    #myMag { position:absolute;top:15%;left:35%;height:35%; width:60%; }
+    #myDir { position:absolute;top:55%;left:35%;height:35%; width:60%; }
+    #graph { position:absolute;top:55%;left:0%;height:40%; width:30%; }
+    input { font-size:xx-small;}
+
+</style>
+  <!-- Plotly.js -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+
+<body>
+    <h1> Magnetometer Data</h1>
+    <p id="xmax/min">xmax/min = / </p> 
+    <p id="ymax/min">ymax/min = / </p> 
+    <p id="zmax/min">zmax/min = / </p> 
+    <p id="phi">phi =  </p> 
+    <p id="theta">theta =  </p> 
+    <p id="magnitude">mag =  </p> 
+    <p id="graph"> </p> 
+    <form> <input type="button" id="clearcal" value="cal">clear calibration </form>
+    <form> <input type="button" id="3dtoggle" value="TurnOn">Stop/Start 3d plot update</form>
+    <div id="myMag" > </div>
+    <div id="myDir" > </div>
+
+    <script>
+
+      setInterval(function(){ getData();}  ,333);
+
+      document.getElementById('clearcal').onclick = function() {
+             xMin= 99999; xMax= -99999;
+             yMin= 99999; yMax= -99999;
+             zMin= 99999; zMax= -99999;
+      }
+
+      document.getElementById('3dtoggle').onclick = function() {
+          if(document.getElementById("3dtoggle").value === "On")
+             document.getElementById("3dtoggle").value = "Off";  else 
+             document.getElementById("3dtoggle").value = "On"; 
+      }
+
+      function getData() {
+         console.log("print "+document.getElementById("3dtoggle").value);
+         var tempstr = "hex="+document.getElementById("3dtoggle").value;
+         var xhr = new XMLHttpRequest();
+         xhr.open("GET", "getData?"+tempstr, true);
+         xhr.setRequestHeader("Content-Type", "application/bin");
+         xhr.send(tempstr);
+
+         xhr.onreadystatechange = function() {
+            if (this.readyState === XMLHttpRequest.DONE && this.status === 200) {
+               var DataRet = this.responseText;
+               var DataRetArray = DataRet.split(",");
+               var lasttraceptr;
+               console.log("Start "+DataRetArray[0]);
+               //console.log("DataRet "+DataRetArray);
+               lasttraceptr = traceptr;
+
+               // populate raw data arrays irdata and rdata
+               var cntsamples= DataRetArray[0];
+               if(cntsamples >=1){
+               for(x=0;x<cntsamples/4;x++) {
+                   tdata[traceptr] = parseInt(DataRetArray[4*x+1],10);
+                   //switch x and y order
+                   xdata[traceptr] = parseInt(DataRetArray[4*x+2],10);
+                   ydata[traceptr] = parseInt(DataRetArray[4*x+4],10);
+                   zdata[traceptr] = parseInt(DataRetArray[4*x+3],10);
+
+                   //crunch crunch
+                   if(xdata[traceptr] < xMin)xMin=xdata[traceptr]; 
+                   if(xdata[traceptr] > xMax)xMax=xdata[traceptr];
+                   if(ydata[traceptr] < yMin)yMin=ydata[traceptr]; 
+                   if(ydata[traceptr] > yMax)yMax=ydata[traceptr];
+                   if(zdata[traceptr] < zMin)zMin=zdata[traceptr]; 
+                   if(zdata[traceptr] > zMax)zMax=zdata[traceptr];
+                   xdata[traceptr] = xdata[traceptr] - 0.5 * (xMax + xMin);   //center
+                   ydata[traceptr] = ydata[traceptr] - 0.5 * (yMax + yMin);
+                   zdata[traceptr] = zdata[traceptr] - 0.5 * (zMax + zMin);
+                   xdata[traceptr] = xdata[traceptr] / (0.5 * (xMax - xMin)); //normalize
+                   ydata[traceptr] = ydata[traceptr] / (0.5 * (yMax - yMin));
+                   zdata[traceptr] = zdata[traceptr] / (0.5 * (zMax - zMin));
+                   mdata[traceptr] = Math.sqrt(xdata[traceptr]*xdata[traceptr]+
+                        ydata[traceptr]*ydata[traceptr]+zdata[traceptr]*zdata[traceptr]);
+
+		   //trig conversion
+                   thxdata[traceptr] = 57.3*Math.abs(Math.acos(zdata[traceptr]) / mdata[traceptr]);
+                   thydata[traceptr] = 57.3*Math.abs(Math.acos(zdata[traceptr]) / mdata[traceptr]);
+                   //var xyrms = Math.sqrt(Math.pow((xdata[traceptr]),2) + Math.pow((ydata[traceptr]),2));
+                   pdata[traceptr]  = 90 + 57.3*Math.atan(ydata[traceptr] / xdata[traceptr]);
+		   if (xdata[traceptr] < 0){pdata[traceptr]=180+pdata[traceptr];}
+                   pdata[traceptr]  = 45 + 180 - pdata[traceptr];
+                   pdata[traceptr]  = (360 + pdata[traceptr]) % 360;
+
+                   if(pdata[traceptr]>=315 || pdata[traceptr]< 45){compass = "N";}
+                   if(pdata[traceptr]>= 45 && pdata[traceptr]<135){compass = "E";}
+                   if(pdata[traceptr]>=135 && pdata[traceptr]<225){compass = "S";}
+                   if(pdata[traceptr]>=225 && pdata[traceptr]<315){compass = "W";}
+
+                   traceptr++;
+               }}
+
+               //myTilt();
+
+               document.getElementById("xmax/min").innerHTML = "xMax = "+
+                   xMax.toFixed(0)+"; xMin = "+xMin.toFixed(0)+";";
+               document.getElementById("ymax/min").innerHTML = "yMax = "+
+                   yMax.toFixed(0)+"; yMin = "+yMin.toFixed(0)+";";
+               document.getElementById("zmax/min").innerHTML = "zMax = "+
+                   zMax.toFixed(0)+"; zMin = "+zMin.toFixed(0)+";";
+               if (isNaN(mdata[traceptr-1]) == false){
+                  document.getElementById("magnitude").innerHTML = "fieldtot = "
+                           +mdata[traceptr-1].toFixed(3)+" G";
+                  document.getElementById("theta").innerHTML = "theta = "
+                           +thxdata[traceptr-1].toFixed(2)+" deg"+
+                           +thydata[traceptr-1].toFixed(2)+" deg";
+                  document.getElementById("phi").innerHTML = "phi = "
+                           +pdata[traceptr-1].toFixed(2)+" degrees"+"  "+compass;
+               }
+
+               //keep the plotting data sample at samples length
+               var maxsamples = 400;
+               if (tdata.length > maxsamples) {
+                   tdata.splice( 0, tdata.length-maxsamples);
+                   xdata.splice( 0, xdata.length-maxsamples);
+                   ydata.splice( 0, ydata.length-maxsamples);
+                   zdata.splice( 0, zdata.length-maxsamples);
+                   mdata.splice( 0, mdata.length-maxsamples);
+                   thxdata.splice( 0, thxdata.length-maxsamples);
+                   thydata.splice( 0, thydata.length-maxsamples);
+                   pdata.splice( 0, pdata.length-maxsamples);
+                   traceptr = maxsamples ;
+               }
+
+               //put the plotting data into plotly trace arrays
+               for(x=0; x<tdata.length; x++){
+                   trace1.x[x] = String(0.01 * tdata[x]);
+                   trace2.x[x] = String(0.01 * tdata[x]);
+                   trace3.x[x] = String(0.01 * tdata[x]);
+                   trace4.x[x] = String(0.01 * tdata[x]);
+                   trace5.x[x] = String(0.01 * tdata[x]);
+                   trace6.x[x] = String(0.01 * tdata[x]);
+                   trace1.y[x] = String(xdata[x]);
+                   trace2.y[x] = String(ydata[x]);
+                   trace3.y[x] = String(zdata[x]);
+                   trace4.y[x] = String(thxdata[x]);
+                   trace5.y[x] = String(thydata[x]);
+                   trace6.y[x] = String(pdata[x]);
+               }
+
+               //interface to html exery plot update
+               Plotly.newPlot('myMag', data, layout,{responsive: true});
+               Plotly.newPlot('myDir', data1, layout1,{responsive: true});
+
+               var x = [ 0, 0,,  0, 0,, -1, 1,, ,0, xdata[traceptr-1],, xdata[traceptr-1],xdata[traceptr-1], 0];
+               var y = [ 0, 0,, -1, 1,,  0, 0,, ,0, ydata[traceptr-1],, 0,ydata[traceptr-1], ydata[traceptr-1]];
+               var z = [-1, 1,,  0, 0,,  0, 0,, ,0, -zdata[traceptr-1],, 0,0,0];
+               var c = [ 1,1,1,1,1,1,1,1,1,6,6,6,6,2,2,2,2];
+
+          if(document.getElementById("3dtoggle").value === "On"){
+               Plotly.newPlot('graph', [{
+                   type: 'scatter3d',
+                   mode: 'lines',
+                   //line: {color:'rgb(255,0,0)', size: 1 },
+                   x: x, y: y, z: z,
+                   plot_bgcolor:"#aaaf", paper_bgcolor:"#a00f", opacity: 1,
+                   line: { width: 6, color: c, reversescale: false } }],
+                   { height:450, responsive: true}
+                 );
+             }
+
+            }
+         }
+      }
+
+      var x;
+      var compass = "N";
+      var magdec = -14.08; var maginc = 66.95;
+      var xMin= 0.9 * -6000; var xMax= 0.9 * 6000; 
+      var yMin= 0.9 * -6000; var yMax= 0.9 * 6000; 
+      var zMin= 0.9 * -6000; var zMax= 0.9 * 6000;
+      var xdata = [0]; var ydata =  [0]; var zdata = [0]; 
+      var mdata = [0]; var thxdata = [0]; var thydata = [0]; var pdata = [0]; 
+      var tdata = [0]; var traceptr = 0;
+      var DataRet;
+      var trace1 = { x: [0], y: [0], mode: "lines+markers", 
+                 line: {color:'rgb(255,0,0)', size: 1 },
+                 marker: {color:'rgb(255,0,0)', size: 3 } };
+      var trace2 = { x: [0], y: [0], mode: "lines+markers", 
+                 line: {color:'rgb(0,255,0)', size: 1 },
+                 marker: {color:'rgb(0,255,0)', size: 3 } };
+      var trace3 = { x: [0], y: [0], mode: "lines+markers", 
+                 line: {color:'rgb(0,0,255)', size: 1 },
+                 marker: {color:'rgb(0,0,255)', size: 3 } };
+      var trace4 = { x: [0], y: [0], mode: "lines+markers", 
+                 line: {color:'rgb(255,0,0)', size: 1 },
+                 marker: {color:'rgb(255,0,0)', size: 3 } };
+      var trace5 = { x: [0], y: [0], mode: "lines+markers", 
+                 line: {color:'rgb(0,255,0)', size: 1 },
+                 marker: {color:'rgb(0,255,0)', size: 3 } };
+      var trace6 = { x: [0], y: [0], mode: "lines+markers", 
+                 line: {color:'rgb(0,0,255)', size: 1 },
+                 marker: {color:'rgb(0,0,255)', size: 3 } };
+
+      layout= {
+            title: { text:'Acceleration', font: { size: 24, color: '#ffffff' } },
+            showlegend : false,
+            autosize : true,
+            margin:{ l:30, r:20, b:40, t:40, pad:4},
+            plot_bgcolor:"#aaaf",
+            paper_bgcolor:"#a00f",
+            xaxis: { title: { text: 'Time (sec)', font: { size: 18, color: '#ffffff' } },
+                     tickfont: { size:16, color:'white'} },
+            yaxis: {autorange: false, 
+                    range: [ -1.1 , 1.1], 
+                    zeroline: true }
+      }
+
+      layout1= {
+            title: { text:'Direction', font: { size: 24, color: '#ffffff' } },
+            showlegend : false,
+            autosize : true,
+            margin:{ l:30, r:20, b:40, t:40, pad:4},
+            plot_bgcolor:"#aaaf",
+            paper_bgcolor:"#a00f",
+            xaxis: { title: { text: 'Time (sec)', font: { size: 18, color: '#ffffff' } },
+                     tickfont: { size:16, color:'white'} },
+            yaxis: {autorange: false, 
+                    range: [ 0 , 360], 
+                    zeroline: true }
+      }
+
+      var data = [trace1, trace2, trace3];
+      var data1 = [trace4, trace5, trace6];
+
+    </script>
+</body>
+</html>
+
+
+
+
